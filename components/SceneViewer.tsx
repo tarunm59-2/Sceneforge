@@ -4,42 +4,6 @@ import React, { useRef, useEffect, useState } from 'react';
 import * as THREE from 'three';
 import { useRouter } from 'next/navigation';
 
-// Type definitions for the CDN-loaded classes
-interface OrbitControlsType {
-  new (camera: THREE.Camera, domElement: HTMLElement): OrbitControlsInstance;
-}
-
-interface OrbitControlsInstance {
-  enableDamping: boolean;
-  dampingFactor: number;
-  target: THREE.Vector3;
-  update(): void;
-  dispose(): void;
-}
-
-interface GLTFLoaderType {
-  new (): GLTFLoaderInstance;
-}
-
-interface GLTFLoaderInstance {
-  parse(
-    data: ArrayBuffer,
-    path: string,
-    onLoad: (gltf: { scene: THREE.Object3D }) => void,
-    onError: (error: Error) => void
-  ): void;
-}
-
-// Declare types for the loaders
-declare global {
-  interface Window {
-    THREE: typeof THREE & {
-      GLTFLoader: GLTFLoaderType;
-      OrbitControls: OrbitControlsType;
-    };
-  }
-}
-
 // Helper component for file upload
 function FileUpload({ onFile }: { onFile: (file: File) => void }) {
   return (
@@ -72,36 +36,30 @@ export default function SceneViewer() {
     renderer?: THREE.WebGLRenderer;
     scene?: THREE.Scene;
     camera?: THREE.PerspectiveCamera;
-    controls?: OrbitControlsInstance;
+    controls?: any;
     animationId?: number;
     model?: THREE.Object3D;
   }>({});
 
-  // Load Three.js addons from CDN
+  // Add a ref to store dynamically imported loaders (GLTFLoader, OrbitControls)
+  const loadersRef = useRef<{ GLTFLoader?: any; OrbitControls?: any }>({});
+
+  // Load Three.js addons via dynamic import (client-only)
   useEffect(() => {
-    window.THREE = THREE as typeof THREE & {
-      GLTFLoader: GLTFLoaderType;
-      OrbitControls: OrbitControlsType;
+    const loadModules = async () => {
+      try {
+        // use three-stdlib which is installed and provides the examples exports with types
+        const stdlib = await import('three-stdlib');
+        loadersRef.current.GLTFLoader = stdlib.GLTFLoader ?? stdlib.GLTFLoader;
+        loadersRef.current.OrbitControls = stdlib.OrbitControls ?? stdlib.OrbitControls;
+        setLoadersReady(true);
+      } catch (err) {
+        console.error('Failed to load three addons', err);
+        setError('Failed to load 3D libraries');
+      }
     };
 
-    const loadScripts = async () => {
-      const gltfScript = document.createElement('script');
-      gltfScript.src = '/GLTFLoader.js'; // Use local file
-      document.head.appendChild(gltfScript);
-
-      const controlsScript = document.createElement('script');
-      controlsScript.src = '/OrbitControls.js'; // Use local file
-      document.head.appendChild(controlsScript);
-
-      await Promise.all([
-        new Promise(resolve => { gltfScript.onload = resolve; }),
-        new Promise(resolve => { controlsScript.onload = resolve; })
-      ]);
-
-      setLoadersReady(true);
-    };
-
-    loadScripts();
+    loadModules();
   }, []);
 
   // Clean up Three.js scene
@@ -164,12 +122,17 @@ export default function SceneViewer() {
       const arrayBuffer = e.target?.result;
       if (!arrayBuffer) return setError('Failed to read file');
 
-      const GLTFLoader = window.THREE.GLTFLoader;
-      const OrbitControls = window.THREE.OrbitControls;
+      // Prefer the dynamically imported loaders; fall back to window if present
+      const GLTFLoader = loadersRef.current.GLTFLoader || (window as any).THREE?.GLTFLoader;
+      const OrbitControls = loadersRef.current.OrbitControls || (window as any).THREE?.OrbitControls;
+
+      if (!GLTFLoader) return setError('GLTFLoader not available');
+      if (!OrbitControls) return setError('OrbitControls not available');
 
       // Setup Three.js scene
       const scene = new THREE.Scene();
       scene.background = new THREE.Color(0x101820);
+
       const camera = new THREE.PerspectiveCamera(60, 1, 0.1, 1000);
       camera.position.set(2, 2, 4);
       const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -191,12 +154,11 @@ export default function SceneViewer() {
       controls.target.set(0, 1, 0);
       controls.update();
 
-      // Load model
       const loader = new GLTFLoader();
       loader.parse(
         arrayBuffer as ArrayBuffer,
         '',
-        (gltf) => {
+        (gltf: any) => {
           const model = gltf.scene;
           scene.add(model);
           threeObjects.current.model = model;
@@ -205,7 +167,7 @@ export default function SceneViewer() {
           // Navigate to /party/1 after successful load
           router.push('/party/1');
         },
-        (err) => {
+        (err: Error) => {
           setError('Failed to load model: ' + err.message);
           setLoading(false);
         }
