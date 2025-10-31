@@ -29,7 +29,6 @@ export default function SceneViewer() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sceneName, setSceneName] = useState<string>('');
-  const [fullscreen, setFullscreen] = useState(true); // Always fullscreen
   const [showExitModal, setShowExitModal] = useState(false);
   const router = useRouter();
 

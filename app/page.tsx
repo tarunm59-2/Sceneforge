@@ -1,7 +1,7 @@
-import { Sparkles } from 'lucide-react';
 import Hero from '@/components/Hero';
 import Features from '@/components/Features';
 import NavBar from '@/components/NavBar';
+import Link from 'next/link';
 
 export default function Home() {
   return (
@@ -20,7 +20,7 @@ export default function Home() {
 
       {/* Create Party Button */}
       <div className="flex justify-center mt-8">
-        <a href="/party/1" className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl shadow-lg text-lg font-bold transition">Create Party</a>
+        <Link href="/party/1" className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl shadow-lg text-lg font-bold transition">Create Party</Link>
       </div>
 
       {/* Features Section */}

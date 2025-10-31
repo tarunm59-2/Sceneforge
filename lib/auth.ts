@@ -9,7 +9,7 @@ export const authOptions: NextAuthOptions = {
     }),
   ],
   callbacks: {
-    async signIn({ user, account, profile }) {
+    async signIn({ user }) {
       // Auto-add user to waitlist when they sign in
       if (user.email) {
         try {
@@ -30,7 +30,7 @@ export const authOptions: NextAuthOptions = {
       }
       return true;
     },
-    async session({ session, token }) {
+    async session({ session }) {
       return session;
     },
   },

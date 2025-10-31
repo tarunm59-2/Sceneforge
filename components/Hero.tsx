@@ -1,6 +1,4 @@
-import { Sparkles } from 'lucide-react';
 import WaitlistForm from './WaitlistForm';
-import SceneViewer from './SceneViewer';
 
 export default function Hero() {
   return (
