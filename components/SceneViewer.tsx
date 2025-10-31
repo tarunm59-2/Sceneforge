@@ -2,9 +2,17 @@
 
 import React, { useRef, useEffect, useState } from 'react';
 import * as THREE from 'three';
-import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader';
-import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
 import { useRouter } from 'next/navigation';
+
+// Declare types for the loaders
+declare global {
+  interface Window {
+    THREE: typeof THREE & {
+      GLTFLoader: any;
+      OrbitControls: any;
+    };
+  }
+}
 
 // Helper component for file upload
 function FileUpload({ onFile }: { onFile: (file: File) => void }) {
@@ -30,6 +38,7 @@ export default function SceneViewer() {
   const [error, setError] = useState<string | null>(null);
   const [sceneName, setSceneName] = useState<string>('');
   const [showExitModal, setShowExitModal] = useState(false);
+  const [loadersReady, setLoadersReady] = useState(false);
   const router = useRouter();
 
   // Store Three.js objects so we can clean up
@@ -37,10 +46,34 @@ export default function SceneViewer() {
     renderer?: THREE.WebGLRenderer;
     scene?: THREE.Scene;
     camera?: THREE.PerspectiveCamera;
-    controls?: OrbitControls;
+    controls?: any;
     animationId?: number;
     model?: THREE.Object3D;
   }>({});
+
+  // Load Three.js addons from CDN
+  useEffect(() => {
+    window.THREE = THREE as any;
+
+    const loadScripts = async () => {
+      const gltfScript = document.createElement('script');
+      gltfScript.src = 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/examples/js/loaders/GLTFLoader.js';
+      document.head.appendChild(gltfScript);
+
+      const controlsScript = document.createElement('script');
+      controlsScript.src = 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/examples/js/controls/OrbitControls.js';
+      document.head.appendChild(controlsScript);
+
+      await Promise.all([
+        new Promise(resolve => { gltfScript.onload = resolve; }),
+        new Promise(resolve => { controlsScript.onload = resolve; })
+      ]);
+
+      setLoadersReady(true);
+    };
+
+    loadScripts();
+  }, []);
 
   // Clean up Three.js scene
   const cleanup = () => {
@@ -59,23 +92,22 @@ export default function SceneViewer() {
       const { camera } = threeObjects.current;
       if (!camera) return;
       const step = 0.2;
-      // Get camera direction vectors
       const forward = new THREE.Vector3();
       camera.getWorldDirection(forward);
       const up = new THREE.Vector3(0, 1, 0);
       const right = new THREE.Vector3().crossVectors(forward, up).normalize();
       switch (e.key) {
         case 'ArrowUp':
-          camera.position.add(forward.clone().multiplyScalar(step)); // forward
+          camera.position.add(forward.clone().multiplyScalar(step));
           break;
         case 'ArrowDown':
-          camera.position.add(forward.clone().multiplyScalar(-step)); // backward
+          camera.position.add(forward.clone().multiplyScalar(-step));
           break;
         case 'ArrowLeft':
-          camera.position.add(right.clone().multiplyScalar(-step)); // left
+          camera.position.add(right.clone().multiplyScalar(-step));
           break;
         case 'ArrowRight':
-          camera.position.add(right.clone().multiplyScalar(step)); // right
+          camera.position.add(right.clone().multiplyScalar(step));
           break;
         case 'Escape':
           setShowExitModal(true);
@@ -88,6 +120,11 @@ export default function SceneViewer() {
 
   // Load GLTF/GLB file
   const handleFile = (file: File) => {
+    if (!loadersReady) {
+      setError('Loaders not ready yet, please wait...');
+      return;
+    }
+
     setLoading(true);
     setError(null);
     setSceneName(file.name);
@@ -97,6 +134,9 @@ export default function SceneViewer() {
     reader.onload = function (e) {
       const arrayBuffer = e.target?.result;
       if (!arrayBuffer) return setError('Failed to read file');
+
+      const GLTFLoader = (window.THREE as any).GLTFLoader;
+      const OrbitControls = (window.THREE as any).OrbitControls;
 
       // Setup Three.js scene
       const scene = new THREE.Scene();
@@ -127,7 +167,7 @@ export default function SceneViewer() {
       loader.parse(
         arrayBuffer as ArrayBuffer,
         '',
-        gltf => {
+        (gltf: any) => {
           const model = gltf.scene;
           scene.add(model);
           threeObjects.current.model = model;
@@ -136,7 +176,7 @@ export default function SceneViewer() {
           // Navigate to /party/1 after successful load
           router.push('/party/1');
         },
-        err => {
+        (err: any) => {
           setError('Failed to load model: ' + err.message);
           setLoading(false);
         }
@@ -178,7 +218,8 @@ export default function SceneViewer() {
       {/* Overlay UI */}
       <div className="absolute top-4 left-4 text-blue-200 bg-black/70 p-2 rounded">
         <h2 className="text-2xl font-bold">3D Scene Viewer</h2>
-        <FileUpload onFile={handleFile} />
+        {!loadersReady && <div className="mt-2 text-yellow-300">Loading 3D libraries...</div>}
+        {loadersReady && <FileUpload onFile={handleFile} />}
         {sceneName && (
           <div className="mb-2 text-blue-100/80 text-sm">Viewing: {sceneName}</div>
         )}
