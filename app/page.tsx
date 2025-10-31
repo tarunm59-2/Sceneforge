@@ -18,6 +18,11 @@ export default function Home() {
       {/* Hero Section */}
       <Hero />
 
+      {/* Create Party Button */}
+      <div className="flex justify-center mt-8">
+        <a href="/party/1" className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl shadow-lg text-lg font-bold transition">Create Party</a>
+      </div>
+
       {/* Features Section */}
       <Features />
     </div>
