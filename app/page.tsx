@@ -2,8 +2,11 @@ import Hero from '@/components/Hero';
 import Features from '@/components/Features';
 import NavBar from '@/components/NavBar';
 import Link from 'next/link';
+import { useSession } from 'next-auth/react';
 
 export default function Home() {
+  const { data: session, status } = useSession();
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-900 via-blue-800 to-teal-900 text-white overflow-hidden">
       {/* Animated background elements */}
@@ -18,10 +21,12 @@ export default function Home() {
       {/* Hero Section */}
       <Hero />
 
-      {/* Create Party Button */}
-      <div className="flex justify-center mt-8">
-        <Link href="/party/1" className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl shadow-lg text-lg font-bold transition">Create Party</Link>
-      </div>
+      {/* Create Party Button (only show if logged in) */}
+      {session?.user?.email && (
+        <div className="flex justify-center mt-8">
+          <Link href="/party/1" className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl shadow-lg text-lg font-bold transition">Create Party</Link>
+        </div>
+      )}
 
       {/* Features Section */}
       <Features />
