@@ -17,7 +17,7 @@ export interface Scene {
   }
   
   // API Response types
-  export interface ApiResponse<T = any> {
+  export interface ApiResponse<T = unknown> {
     success: boolean;
     data?: T;
     error?: string;
@@ -26,7 +26,7 @@ export interface Scene {
   
   // Feature types
   export interface Feature {
-    icon: any; // Lucide icon component
+    icon: React.ReactNode; // Lucide icon component
     title: string;
     description: string;
     gradient: string;
