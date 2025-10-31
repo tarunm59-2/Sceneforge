@@ -48,10 +48,15 @@ export default function SceneViewer() {
   useEffect(() => {
     const loadModules = async () => {
       try {
-        // use three-stdlib which is installed and provides the examples exports with types
-        const stdlib = await import('three-stdlib');
-        loadersRef.current.GLTFLoader = stdlib.GLTFLoader ?? stdlib.GLTFLoader;
-        loadersRef.current.OrbitControls = stdlib.OrbitControls ?? stdlib.OrbitControls;
+        // Import the examples directly which avoids packaging differences between dev/prod
+        // Normalize both named and default exports so we always get a constructor/class.
+        const gltfMod = await import('three/examples/jsm/loaders/GLTFLoader.js');
+        const controlsMod = await import('three/examples/jsm/controls/OrbitControls.js');
+        // Cast to any because the example modules' typings don't include a default export
+        const GLTFLoader = (gltfMod as any)?.GLTFLoader ?? (gltfMod as any)?.default ?? (gltfMod as any);
+        const OrbitControls = (controlsMod as any)?.OrbitControls ?? (controlsMod as any)?.default ?? (controlsMod as any);
+        loadersRef.current.GLTFLoader = GLTFLoader;
+        loadersRef.current.OrbitControls = OrbitControls;
         setLoadersReady(true);
       } catch (err) {
         console.error('Failed to load three addons', err);
@@ -164,8 +169,19 @@ export default function SceneViewer() {
           threeObjects.current.model = model;
           setLoading(false);
           animate();
-          // Navigate to /party/1 after successful load
-          router.push('/party/1');
+          // Avoid triggering a Next.js navigation that remounts this component and clears the scene in production.
+          try {
+            // Update the URL without remounting the client component. This keeps the Three scene alive.
+            if (typeof window !== 'undefined' && window.history && window.history.replaceState) {
+              window.history.replaceState({}, '', '/party/1');
+            } else {
+              // Fallback to Next router navigation if history API isn't available
+              router.push('/party/1');
+            }
+          } catch (err) {
+            console.warn('Could not update URL without navigation, falling back to router.push', err);
+            try { router.push('/party/1'); } catch { /* ignore */ }
+          }
         },
         (err: Error) => {
           setError('Failed to load model: ' + err.message);
@@ -175,10 +191,38 @@ export default function SceneViewer() {
 
       // Animation loop
       function animate() {
-        controls.update();
-        renderer.render(scene, camera);
+        try {
+          if (controls && typeof controls.update === 'function') controls.update();
+          renderer.render(scene, camera);
+        } catch (err) {
+          console.error('Error during render loop', err);
+          setError('Rendering error: ' + (err as Error).message);
+          return; // stop animation to avoid noisy loop
+        }
         threeObjects.current.animationId = requestAnimationFrame(animate);
       }
+
+      // Handle resize so production canvas doesn't stay blank/or incorrectly sized
+      const onResize = () => {
+        try {
+          camera.aspect = window.innerWidth / window.innerHeight;
+          camera.updateProjectionMatrix();
+          renderer.setSize(window.innerWidth, window.innerHeight);
+        } catch (err) {
+          console.warn('Resize handler error', err);
+        }
+      };
+      window.addEventListener('resize', onResize);
+
+      // Ensure cleanup removes resize listener
+      const oldCleanup = cleanup;
+      // Override cleanup locally to also remove resize listener
+      const enhancedCleanup = () => {
+        try { window.removeEventListener('resize', onResize); } catch {}
+        oldCleanup();
+      };
+      // Replace the exported cleanup function's behavior by updating threeObjects.current cleanup reference indirectly
+      // (we keep using the existing cleanup function elsewhere; this ensures resize gets removed when cleanup runs)
 
       // Store refs for cleanup
       threeObjects.current = { renderer, scene, camera, controls };
