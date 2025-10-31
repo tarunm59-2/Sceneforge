@@ -1,3 +1,5 @@
+"use client"
+// ...existing code...
 import Hero from '@/components/Hero';
 import Features from '@/components/Features';
 import NavBar from '@/components/NavBar';
