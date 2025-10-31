@@ -86,11 +86,11 @@ export default function SceneViewer() {
 
     const loadScripts = async () => {
       const gltfScript = document.createElement('script');
-      gltfScript.src = 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/examples/js/loaders/GLTFLoader.js';
+      gltfScript.src = '/GLTFLoader.js'; // Use local file
       document.head.appendChild(gltfScript);
 
       const controlsScript = document.createElement('script');
-      controlsScript.src = 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/examples/js/controls/OrbitControls.js';
+      controlsScript.src = '/OrbitControls.js'; // Use local file
       document.head.appendChild(controlsScript);
 
       await Promise.all([
