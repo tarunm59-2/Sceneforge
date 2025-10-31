@@ -4,6 +4,34 @@ import React, { useRef, useEffect, useState } from 'react';
 import * as THREE from 'three';
 import { useRouter } from 'next/navigation';
 
+// Small helper types to avoid using `any`
+type AnyConstructor<T = unknown> = new (...args: unknown[]) => T;
+
+interface ControlsLike {
+  update?: () => void;
+  dispose?: () => void;
+  enableDamping?: boolean;
+  dampingFactor?: number;
+  target?: { set: (x: number, y: number, z: number) => void };
+}
+
+interface GLTF {
+  scene: THREE.Object3D;
+}
+
+// Resolve a constructor from a dynamic module shape without using `any`
+function resolveConstructor(mod: unknown, namedKey: string): AnyConstructor | undefined {
+  if (!mod) return undefined;
+  if (typeof mod === 'function') return mod as AnyConstructor;
+  if (typeof mod === 'object') {
+    const m = mod as Record<string, unknown>;
+    const candidate = m[namedKey];
+    if (typeof candidate === 'function') return candidate as AnyConstructor;
+    if (typeof m.default === 'function') return m.default as AnyConstructor;
+  }
+  return undefined;
+}
+
 // Helper component for file upload
 function FileUpload({ onFile }: { onFile: (file: File) => void }) {
   return (
@@ -36,13 +64,14 @@ export default function SceneViewer() {
     renderer?: THREE.WebGLRenderer;
     scene?: THREE.Scene;
     camera?: THREE.PerspectiveCamera;
-    controls?: any;
+    controls?: ControlsLike;
     animationId?: number;
     model?: THREE.Object3D;
+    onResize?: () => void;
   }>({});
 
   // Add a ref to store dynamically imported loaders (GLTFLoader, OrbitControls)
-  const loadersRef = useRef<{ GLTFLoader?: any; OrbitControls?: any }>({});
+  const loadersRef = useRef<{ GLTFLoader?: AnyConstructor; OrbitControls?: AnyConstructor }>({});
 
   // Load Three.js addons via dynamic import (client-only)
   useEffect(() => {
@@ -52,9 +81,8 @@ export default function SceneViewer() {
         // Normalize both named and default exports so we always get a constructor/class.
         const gltfMod = await import('three/examples/jsm/loaders/GLTFLoader.js');
         const controlsMod = await import('three/examples/jsm/controls/OrbitControls.js');
-        // Cast to any because the example modules' typings don't include a default export
-        const GLTFLoader = (gltfMod as any)?.GLTFLoader ?? (gltfMod as any)?.default ?? (gltfMod as any);
-        const OrbitControls = (controlsMod as any)?.OrbitControls ?? (controlsMod as any)?.default ?? (controlsMod as any);
+        const GLTFLoader = resolveConstructor(gltfMod, 'GLTFLoader');
+        const OrbitControls = resolveConstructor(controlsMod, 'OrbitControls');
         loadersRef.current.GLTFLoader = GLTFLoader;
         loadersRef.current.OrbitControls = OrbitControls;
         setLoadersReady(true);
@@ -69,11 +97,14 @@ export default function SceneViewer() {
 
   // Clean up Three.js scene
   const cleanup = () => {
-    const { renderer, controls, animationId, scene, model } = threeObjects.current;
+    const { renderer, controls, animationId, scene, model, onResize } = threeObjects.current;
     if (animationId) cancelAnimationFrame(animationId);
-    if (controls) controls.dispose();
+    if (controls) controls.dispose && controls.dispose();
     if (renderer) renderer.dispose();
     if (scene && model) scene.remove(model);
+    if (onResize) {
+      try { window.removeEventListener('resize', onResize); } catch {}
+    }
     if (mountRef.current) mountRef.current.innerHTML = '';
     threeObjects.current = {};
   };
@@ -128,8 +159,9 @@ export default function SceneViewer() {
       if (!arrayBuffer) return setError('Failed to read file');
 
       // Prefer the dynamically imported loaders; fall back to window if present
-      const GLTFLoader = loadersRef.current.GLTFLoader || (window as any).THREE?.GLTFLoader;
-      const OrbitControls = loadersRef.current.OrbitControls || (window as any).THREE?.OrbitControls;
+      const win = window as unknown as Window & { THREE?: Record<string, unknown> };
+      const GLTFLoader = loadersRef.current.GLTFLoader ?? resolveConstructor(win.THREE, 'GLTFLoader');
+      const OrbitControls = loadersRef.current.OrbitControls ?? resolveConstructor(win.THREE, 'OrbitControls');
 
       if (!GLTFLoader) return setError('GLTFLoader not available');
       if (!OrbitControls) return setError('OrbitControls not available');
@@ -153,17 +185,18 @@ export default function SceneViewer() {
       scene.add(directional);
 
       // Controls
-      const controls = new OrbitControls(camera, renderer.domElement);
+      const controls = new (OrbitControls as AnyConstructor)(camera, renderer.domElement) as ControlsLike;
       controls.enableDamping = true;
       controls.dampingFactor = 0.1;
-      controls.target.set(0, 1, 0);
-      controls.update();
+      // target and update may be optional on the controls type; guard access to satisfy TS
+      controls.target?.set(0, 1, 0);
+      controls.update?.();
 
-      const loader = new GLTFLoader();
+      const loader = new (GLTFLoader as AnyConstructor)() as { parse: (buf: ArrayBuffer, path: string, onLoad: (gltf: GLTF) => void, onError?: (e: Error) => void) => void };
       loader.parse(
         arrayBuffer as ArrayBuffer,
         '',
-        (gltf: any) => {
+        (gltf: GLTF) => {
           const model = gltf.scene;
           scene.add(model);
           threeObjects.current.model = model;
@@ -213,19 +246,8 @@ export default function SceneViewer() {
         }
       };
       window.addEventListener('resize', onResize);
-
-      // Ensure cleanup removes resize listener
-      const oldCleanup = cleanup;
-      // Override cleanup locally to also remove resize listener
-      const enhancedCleanup = () => {
-        try { window.removeEventListener('resize', onResize); } catch {}
-        oldCleanup();
-      };
-      // Replace the exported cleanup function's behavior by updating threeObjects.current cleanup reference indirectly
-      // (we keep using the existing cleanup function elsewhere; this ensures resize gets removed when cleanup runs)
-
-      // Store refs for cleanup
-      threeObjects.current = { renderer, scene, camera, controls };
+      // Store refs for cleanup (include the onResize so cleanup can remove it)
+      threeObjects.current = { renderer, scene, camera, controls, onResize };
     };
     reader.readAsArrayBuffer(file);
   };
