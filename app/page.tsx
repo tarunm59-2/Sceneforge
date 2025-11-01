@@ -3,13 +3,13 @@
 import Hero from '@/components/Hero';
 import Features from '@/components/Features';
 import NavBar from '@/components/NavBar';
-import Link from 'next/link';
 import { useSession } from 'next-auth/react';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 
 export default function Home() {
-  const { data: session, status } = useSession();
+  // only pull the session data we use (status was unused and caused a lint warning)
+  const { data: session } = useSession();
   const router = useRouter();
   const [showPromptModal, setShowPromptModal] = useState(false);
   const [prompt, setPrompt] = useState('');
@@ -105,49 +105,15 @@ export default function Home() {
         body: JSON.stringify(initBody)
       });
 
-      // Read raw text and try to parse JSON so we can log both
+      // Read raw text and log raw response (no parsing)
       const initText = await initRes.text().catch(() => null);
-      let initJson: any = {};
-      try {
-        initJson = initText ? JSON.parse(initText) : {};
-      } catch (e) {
-        // If parsing fails, keep initJson as empty and log the parse error
-        console.warn('Failed to parse initialize response JSON:', e);
-      }
 
-      // Log detailed response info
-      console.log('initialize response:', {
+      console.log('initialize response raw:', {
         status: initRes.status,
         statusText: initRes.statusText,
         headers: Array.from(initRes.headers.entries()),
-        text: initText,
-        json: initJson
+        text: initText
       });
-
-      // Robustly extract sceneRecordId and userRecordId from various possible response shapes.
-      const safeParse = (val: any) => {
-        if (!val) return undefined;
-        if (typeof val === 'string') {
-          try { return JSON.parse(val); } catch { return undefined; }
-        }
-        return val;
-      };
-
-      // Normalize result which might be an object or a JSON string
-      const normalizedResult = safeParse(initJson?.result) ?? initJson?.result;
-      const normalizedRoot = safeParse(initJson) ?? initJson;
-
-      const findId = (obj: any, key: string) => {
-        if (!obj) return undefined;
-        // common locations
-        return obj?.outputs?.[key] ?? obj?.[key] ?? obj?.result?.outputs?.[key] ?? obj?.result?.[key] ?? undefined;
-      };
-
-      const resolvedSceneRecordId = findId(normalizedResult, 'sceneRecordId') ?? findId(normalizedRoot, 'sceneRecordId');
-      const resolvedUserRecordId = findId(normalizedResult, 'userRecordId') ?? findId(normalizedRoot, 'userRecordId');
-
-      console.log('Resolved sceneRecordId from initialize response:', resolvedSceneRecordId);
-      console.log('Resolved userRecordId from initialize response:', resolvedUserRecordId);
 
       // Close modal and navigate to glb screen
       setShowPromptModal(false);
