@@ -99,7 +99,9 @@ export default function SceneViewer() {
   const cleanup = () => {
     const { renderer, controls, animationId, scene, model, onResize } = threeObjects.current;
     if (animationId) cancelAnimationFrame(animationId);
-    if (controls) controls.dispose && controls.dispose();
+    if (controls && typeof controls.dispose === 'function') {
+      controls.dispose();
+    }
     if (renderer) renderer.dispose();
     if (scene && model) scene.remove(model);
     if (onResize) {
